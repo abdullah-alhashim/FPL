@@ -23,25 +23,6 @@ from selenium.webdriver.common.keys import Keys
 start_time = time()
 
 
-def df_to_gsheet(df2, GW, col):
-    CLIENT_SECRET_FILE = 'client_secret.json'
-    API_SERVICE_NAME = 'sheets'
-    API_VERSION = 'v4'
-    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-    gsheetId = keyring.get_password('gsheetId', 'FPL')
-
-    service = Create_Service(CLIENT_SECRET_FILE, API_SERVICE_NAME, API_VERSION, SCOPES)
-
-    service.spreadsheets().values().append(
-        spreadsheetId=gsheetId,
-        valueInputOption='RAW',
-        range=GW + '!' + col + '1',
-        body=dict(
-            majorDimension='COLUMNS',
-            values=df2.T.values.tolist())
-    ).execute()
-
-
 class SquadFPL:
     def __init__(self, league_name):
         self.league_name = league_name
@@ -55,6 +36,34 @@ class SquadFPL:
         self.colNames = list(ascii_uppercase)
         self.colNames.extend(['A' + x for x in list(ascii_uppercase)])
         self.colNames.extend(['B' + x for x in list(ascii_uppercase)])
+        self.is_first = True
+
+    def df_to_gsheet(self, df2, GW, col):
+        CLIENT_SECRET_FILE = 'client_secret.json'
+        API_SERVICE_NAME = 'sheets'
+        API_VERSION = 'v4'
+        SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+        gsheetId = keyring.get_password('gsheetId', 'FPL')
+
+        service = Create_Service(CLIENT_SECRET_FILE, API_SERVICE_NAME, API_VERSION, SCOPES)
+
+        # clear old data before writing the new data
+        if self.is_first:
+            service.spreadsheets().values().clear(
+                spreadsheetId=gsheetId,
+                range=GW + '!' + '1:18'
+            ).execute()
+            self.is_first = False
+
+        # write data to spreadsheet
+        service.spreadsheets().values().append(
+            spreadsheetId=gsheetId,
+            valueInputOption='RAW',
+            range=GW + '!' + col + '1',
+            body=dict(
+                majorDimension='COLUMNS',
+                values=df2.T.values.tolist())
+        ).execute()
 
     def squads(self):
         try:
@@ -134,11 +143,11 @@ class SquadFPL:
 
                 # add text to captain and vice captain
                 if is_triple_captain:
-                    squad_df['Starters'][captainIndex-1] = squad_df['Starters'][captainIndex-1] + ' (3*C)'
-                    squad_df['Starters'][viceIndex-1] = squad_df['Starters'][viceIndex-1] + ' (3*V)'
+                    squad_df['Starters'][captainIndex - 1] = squad_df['Starters'][captainIndex - 1] + ' (3*C)'
+                    squad_df['Starters'][viceIndex - 1] = squad_df['Starters'][viceIndex - 1] + ' (3*V)'
                 else:
-                    squad_df['Starters'][captainIndex-1] = squad_df['Starters'][captainIndex-1] + ' (C)'
-                    squad_df['Starters'][viceIndex-1] = squad_df['Starters'][viceIndex-1] + ' (V)'
+                    squad_df['Starters'][captainIndex - 1] = squad_df['Starters'][captainIndex - 1] + ' (C)'
+                    squad_df['Starters'][viceIndex - 1] = squad_df['Starters'][viceIndex - 1] + ' (V)'
 
                 # prepare data to be inserted to Google sheet
                 playersOnly = [self.name]
@@ -162,8 +171,8 @@ class SquadFPL:
                 playersPts = pd.DataFrame(playersPts)
 
                 # add data to Google sheet (first run should ask for permission and .pickle file will be created)
-                df_to_gsheet(playersOnly, self.GW, self.colNames[(i - 1) * 2])
-                df_to_gsheet(playersPts, self.GW, self.colNames[i * 2 - 1])
+                self.df_to_gsheet(playersOnly, self.GW, self.colNames[(i - 1) * 2])
+                self.df_to_gsheet(playersPts, self.GW, self.colNames[i * 2 - 1])
                 self.driver.back()
         finally:
             self.driver.quit()
