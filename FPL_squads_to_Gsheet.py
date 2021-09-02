@@ -11,6 +11,8 @@ Created on Sat Aug 14, 2021
 """
 
 from time import time
+import os
+from glob import glob
 import pandas as pd
 import numpy as np
 import keyring
@@ -19,6 +21,7 @@ from selenium import webdriver
 from Google import Create_Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from google.auth.exceptions import RefreshError
 
 start_time = time()
 
@@ -45,7 +48,11 @@ class SquadFPL:
         SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
         gsheetId = keyring.get_password('gsheetId', 'FPL')
 
-        service = Create_Service(CLIENT_SECRET_FILE, API_SERVICE_NAME, API_VERSION, SCOPES)
+        try:
+            service = Create_Service(CLIENT_SECRET_FILE, API_SERVICE_NAME, API_VERSION, SCOPES)
+        except RefreshError:
+            os.remove(glob('./*.pickle')[0])
+            service = Create_Service(CLIENT_SECRET_FILE, API_SERVICE_NAME, API_VERSION, SCOPES)
 
         # clear old data before writing the new data
         if self.is_first:
@@ -131,7 +138,7 @@ class SquadFPL:
                                               if ('View' in s) or ('playing' in s) or ('injury' in s)
                                               or ('Expected' in s) or ('Transferred' in s) or ('loan' in s)
                                               or ('Unknown' in s) or ('Left' in s)])
-                captainIndex = np.where(squad_df['Starters'] == captain[0])[0][0] + 1
+
                 vice = self.driver.find_element_by_css_selector(
                     '.TableCaptains__StyledViceCaptain-sc-1ub910p-1').find_element_by_xpath('../..').text
                 vice = np.array(vice.splitlines())
@@ -139,15 +146,32 @@ class SquadFPL:
                                         if ('View' in s) or ('playing' in s) or ('injury' in s)
                                         or ('Expected' in s) or ('Transferred' in s) or ('loan' in s)
                                         or ('Unknown' in s) or ('Left' in s)])
-                viceIndex = np.where(squad_df['Starters'] == vice[0])[0][0] + 1
+
+                # if captain is in not in starting XI, look for captain in subs
+                if np.any(squad_df['Starters'] == captain[0]):
+                    captain_df = squad_df
+                    captain_col = 'Starters'
+                else:
+                    captain_df = subsquad_df
+                    captain_col = 'Substitutes'
+
+                if np.any(squad_df['Starters'] == vice[0]):
+                    vice_df = squad_df
+                    vice_col = 'Starters'
+                else:
+                    vice_df = subsquad_df
+                    vice_col = 'Substitutes'
+
+                captainIndex = np.where(captain_df[captain_col] == captain[0])[0][0] + 1
+                viceIndex = np.where(vice_df[vice_col] == vice[0])[0][0] + 1
 
                 # add text to captain and vice captain
                 if is_triple_captain:
-                    squad_df['Starters'][captainIndex - 1] = squad_df['Starters'][captainIndex - 1] + ' (3*C)'
-                    squad_df['Starters'][viceIndex - 1] = squad_df['Starters'][viceIndex - 1] + ' (3*V)'
+                    captain_df[captain_col][captainIndex - 1] = captain_df[captain_col][captainIndex - 1] + ' (3*C)'
+                    vice_df[vice_col][viceIndex - 1] = vice_df[vice_col][viceIndex - 1] + ' (3*V)'
                 else:
-                    squad_df['Starters'][captainIndex - 1] = squad_df['Starters'][captainIndex - 1] + ' (C)'
-                    squad_df['Starters'][viceIndex - 1] = squad_df['Starters'][viceIndex - 1] + ' (V)'
+                    captain_df[captain_col][captainIndex - 1] = captain_df[captain_col][captainIndex - 1] + ' (C)'
+                    vice_df[vice_col][viceIndex - 1] = vice_df[vice_col][viceIndex - 1] + ' (V)'
 
                 # prepare data to be inserted to Google sheet
                 playersOnly = [self.name]
