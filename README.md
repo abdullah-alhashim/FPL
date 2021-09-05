@@ -1,6 +1,13 @@
 # FPL
 
 This code transfers the lineups of all members of an FPL league to a Google spreadsheet.
+
+Required packages:
+- pandas
+- numpy
+- keyring
+- selenium
+- google-api-python-client
 _______
 To run the Google Spreadsheet API, you will need to set up OAuth 2.0 client ID.
 1. Go to the Google Cloud Platform Console.
