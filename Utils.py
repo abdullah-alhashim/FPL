@@ -9,11 +9,11 @@ from googleapiclient.errors import HttpError
 
 
 class Utils:
-    def __init__(self):
-        self.spreadsheet_id = None
-        self.base_sheet_id = None
-        self.spreadsheet = None
-        self.create_spreadsheet()
+    def __init__(self, spreadsheet_id, base_sheet_id):
+        self.spreadsheet_id = spreadsheet_id
+        self.base_sheet_id = base_sheet_id
+        self.service = self.create_spreadsheet()
+        self.spreadsheet = self.service.get(spreadsheetId=self.spreadsheet_id).execute()
 
     @staticmethod
     def create_service(client_secret_file, api_name, api_version, *scopes):
@@ -59,57 +59,53 @@ class Utils:
 
         try:
             service = self.create_service(CLIENT_SECRET_FILE, API_SERVICE_NAME, API_VERSION, SCOPES)
-            self.spreadsheet = service.spreadsheets()
+            return service.spreadsheets()
         except RefreshError:
             print('\033[33m RefreshError: Removing pickle file and trying again... \033[0m')  # print in orange
             os.remove(glob('./*.pickle')[0])
             service = self.create_service(CLIENT_SECRET_FILE, API_SERVICE_NAME, API_VERSION, SCOPES)
-            self.spreadsheet = service.spreadsheets()
+            return service.spreadsheets()
 
-    def df_to_spreadsheet(self, spreadsheet_id, base_sheet_id, df2, gw, col):
-        self.spreadsheet_id = spreadsheet_id
-        self.base_sheet_id = base_sheet_id
+    def write_data(self, df2, gw, last_col_index):
+        # clear old data before writing the new data
+        self.service.values().clear(spreadsheetId=self.spreadsheet_id, range=f'{gw}!1:21').execute()
+
+        # write data to spreadsheet
+        self.service.values().append(
+            spreadsheetId=self.spreadsheet_id,
+            valueInputOption='RAW',
+            range=f'{gw}!A1',
+            body=dict(
+                majorDimension='COLUMNS',
+                values=df2.T.values.tolist())
+        ).execute()
+
+        # delete extra columns
+        for sheet in self.spreadsheet['sheets']:
+            if sheet['properties']['title'] == gw:
+                sheet_id = sheet['properties']['sheetId']
+                col_count = sheet['properties']['gridProperties']['columnCount']
+                body = {
+                    "requests": [{"deleteDimension": {"range": {"sheetId": sheet_id,
+                                                                "dimension": "COLUMNS",
+                                                                "startIndex": last_col_index,
+                                                                "endIndex": col_count}}}]}
+                self.service.batchUpdate(spreadsheetId=self.spreadsheet_id, body=body).execute()
+
+    def df_to_spreadsheet(self, df2, gw, last_col_index):
         try:
-            # clear old data before writing the new data
-            self.spreadsheet.values().clear(spreadsheetId=self.spreadsheet_id, range=f'{gw}!1:20').execute()
-
-            # write data to spreadsheet
-            self.spreadsheet.values().append(
-                spreadsheetId=self.spreadsheet_id,
-                valueInputOption='RAW',
-                range=f'{gw}!{col}1',
-                body=dict(
-                    majorDimension='COLUMNS',
-                    values=df2.T.values.tolist())
-            ).execute()
+            self.write_data(df2, gw, last_col_index)
         except HttpError as e:
             if 'Unable to parse range' in e.error_details:  # probably the sheet does not exist
                 # duplicate base sheet to get the same formatting
                 body = {'requests': [{'duplicateSheet': {'sourceSheetId': self.base_sheet_id,
                                                          'insertSheetIndex': 0,
                                                          'newSheetName': gw}}]}
-                self.spreadsheet.batchUpdate(spreadsheetId=self.spreadsheet_id, body=body).execute()
+                self.service.batchUpdate(spreadsheetId=self.spreadsheet_id, body=body).execute()
 
-                # clear old data before writing the new data
-                self.spreadsheet.values().clear(spreadsheetId=self.spreadsheet_id, range=f'{gw}!1:20').execute()
+                self.write_data(df2, gw, last_col_index)
 
-                # write data to spreadsheet
-                self.spreadsheet.values().append(
-                    spreadsheetId=self.spreadsheet_id,
-                    valueInputOption='RAW',
-                    range=f'{gw}!{col}1',
-                    body=dict(
-                        majorDimension='COLUMNS',
-                        values=df2.T.values.tolist())
-                ).execute()
-
-    def get_sheets_names(self, spreadsheet_id, base_sheet_id):
-        self.spreadsheet_id = spreadsheet_id
-        self.base_sheet_id = base_sheet_id
-        response = self.spreadsheet.get(spreadsheetId=self.spreadsheet_id).execute()
-        sheets_names = [response['sheets'][i]['properties']['title']
-                        for i in range(len(response['sheets']))]
+    def get_sheets_names(self):
+        sheets_names = [self.spreadsheet['sheets'][i]['properties']['title']
+                        for i in range(len(self.spreadsheet['sheets']))]
         return sheets_names
-
-
-utils = Utils()
