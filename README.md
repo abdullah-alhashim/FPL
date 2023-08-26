@@ -16,7 +16,7 @@ To run the Google Spreadsheet API, you will need to set up OAuth 2.0 client ID.
 3. If the APIs & services page isn't already open, open the console left side menu and select APIs & services.
 On the left, click Credentials.
 4. Click New Credentials, then select OAuth client ID.
-5. Select "Web Application" in the application type, and add "http://localhost:8080/" to Authorized redirect URIs.
+5. Select "Web Application" in the application type, and add "http<area>://localhost:8080/" to Authorized redirect URIs.
 6. If this is your first time creating a client ID, you can also configure your consent screen by clicking Consent Screen. 
     - Go to the Google API Console OAuth consent screen page.
     - Add required information like a product name and support email address.
@@ -31,9 +31,9 @@ _______
 
 To run the code, provide the Google Spreadsheet ID and the base sheet ID using arguments.. In terminal, run the code like this:
 <pre>
->> python FPL_API.py <b>spreadsheet_id</b> <>base_sheet_id</b>
+>> python FPL_API.py <b>spreadsheet_id</b> <b>base_sheet_id</b>
 </pre>
-Replacing <b>spreadsheet_id</b> and <>base_sheet_id</b> with the appropriate strings.
+Replacing <b>spreadsheet_id</b> and <b>base_sheet_id</b> with the appropriate strings.
 Note: The Google Spreadsheet ID can be found in the URL:
 *https<area>://docs.google.com/spreadsheets/d/**spreadsheetId**/edit#gid=baseSheetId*
 <br></br>
