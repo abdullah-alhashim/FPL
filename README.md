@@ -1,13 +1,14 @@
 # FPL
 
-This code transfers the lineups of all members of an FPL league to a Google spreadsheet.
+This code transfers the lineups of all members of an FPL league to a Google spreadsheet for all previous gameweeks.
 
 Required packages:
 - pandas
 - numpy
-- keyring
-- selenium
+- pydash
+- requests
 - google-api-python-client
+- google_auth_oauthlib
 _______
 To run the Google Spreadsheet API, you will need to set up OAuth 2.0 client ID.
 1. Go to the Google Cloud Platform Console.
@@ -28,28 +29,15 @@ On the left, click Credentials.
 8. Finally, click on Download JSON,  and rename the file to "client_secret.json"
 _______
 
-To run the code, you need to download the latest release of Chrome WebDriver from here:
-https://chromedriver.storage.googleapis.com/index.html
-
-Place the WebDriver file in the repo folder. 
-Then, change the name of the league in the SquadFPL class definition.
+To run the code, provide the Google Spreadsheet ID and the base sheet ID using arguments.. In terminal, run the code like this:
 <pre>
-fpl = SquadFPL(league_name=<b>"place name of league here"</b>)
+>> python FPL_API.py <b>spreadsheet_id</b> <>base_sheet_id</b>
 </pre>
-
-
-Then, set your secret parameters using *keyring* package. In python console, run the following:
-<pre>
-keyring.set_password('gsheetId', 'FPL', <b>'place Google spreadsheet ID here'</b>)
-keyring.set_password('FPL', 'username', <b>'place your FPL username here'</b>)
-keyring.set_password('FPL', 'password', <b>'place your FPL password here'</b>)
-</pre>
-Note: Google sheet ID can  be found in the Google spreadsheet URL:
-*https<area>://docs.google.com/spreadsheets/d/**spreadsheetId**/edit#gid=0*
+Replacing <b>spreadsheet_id</b> and <>base_sheet_id</b> with the appropriate strings.
+Note: The Google Spreadsheet ID can be found in the URL:
+*https<area>://docs.google.com/spreadsheets/d/**spreadsheetId**/edit#gid=baseSheetId*
 <br></br>
 
 **Note:** 
-- Currently, the code does not create a new sheet for each Gameweek, but it expects that the sheet already exists.
-For example, it the last gameweek is gameweek 4, the code expects a sheet named "Gameweek 4".
-
-- You can add conditional formatting to the Google sheet to add a colorful representation of the player points.
+- The code expects a <b>base</b> sheet that contains the formatting that you want for the points and the players. You have to provide this base sheet's ID as an argument.
+- The code can be run at anytime and it will get the points and squads of each player for all previous gameweeks plus updating the current gameweek.
