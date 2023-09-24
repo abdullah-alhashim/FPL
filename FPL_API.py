@@ -64,10 +64,11 @@ for i in range(len(boot['events'])):
         break
 assert current_gameweek is not None
 # exclude gameweeks that already exist
-gameweeks = list(set(gameweeks) - set([int(name[2:]) for name in sheets_names if name != 'base']))
+# gameweeks = list(set(gameweeks) - set([int(name[2:]) for name in sheets_names if name != 'base']))
 
 # always include current gameweek
 gameweeks += [current_gameweek]
+# include previous to minimum gameweek to be able to label new players
 if all([is_loaded_managers_squads,
         not (min(gameweeks) - 1) in managers_squads.keys(),
         min(gameweeks) != 1]):
@@ -79,12 +80,10 @@ chips = {'3xc': 'Triple Captain', 'bboost': 'Bench Boost',
 for gameweek in gameweeks:
     print(f'GW{gameweek}')
     managers_squads[gameweek] = {}
-    squads = pd.DataFrame(index=range(21), columns=range(len(standing) * 2))
-    print(f'>> updating {len(standing)} members:')
     manager_ids = []
     managers_picks = []
     squads_ids = []
-    print('Getting squads IDs ', end='')
+    print(f'Getting squads IDs ({len(standing)}) ', end='')
     for user_i in range(len(standing)):
         print('.', end='' if user_i + 1 != len(standing) else '\n')
         manager_id = str(standing[user_i]['entry'])
@@ -99,16 +98,17 @@ for gameweek in gameweeks:
     # this step was seperated to save time because element-summary requests take some time
     squads_ids = list(np.unique(squads_ids))
     gw_data = []
-    print('Loading Gameweek data ', end='')
+    print(f'Loading Gameweek data ({len(squads_ids)}) ', end='')
     for i in squads_ids:
         print('.', end='' if i != squads_ids[-1] else '\n')
         element_summary = requests.get(f"{base}/element-summary/{i}/").json()['history']
-        if gameweek <= len(element_summary):
-            gw_data += [element_summary[gameweek - 1]]
-        else:
-            gw_data += [None]
+        gw_data += [_.find(element_summary, {'round': gameweek})]
+    managers_squads[gameweek]['gw_data'] = gw_data
 
     print('Updating squads ', end='')
+    header = ['Rank', 'Team', 'Name', 'Starters', *list(range(1, 12)),
+              'Bench', *list(range(12, 16)), '', 'Transfers', '', 'Chips']
+    squads = pd.DataFrame(index=range(len(header)), columns=range(len(standing) * 2))
     for user_i in range(len(standing)):
         print('.', end='' if user_i + 1 != len(standing) else '\n')
         manager = requests.get(f'{base}/entry/{manager_ids[user_i]}/').json()
@@ -124,17 +124,20 @@ for gameweek in gameweeks:
         elif gameweek == current_gameweek - 1:
             manager_rank = standing[user_i]['last_rank']
         else:
-            manager_rank = ''  # if 2 gameweeks pass without updating, the rank is lost. The sorting done later.
+            manager_rank = ''
 
-        manager_total_pts = managers_picks[user_i]['entry_history']['total_points']
-        manager_gameweek_pts = managers_picks[user_i]['entry_history']['points']
-        manager_bench_pts = managers_picks[user_i]['entry_history']['points_on_bench']
-        manager_active_chip = chips[managers_picks[user_i]['active_chip']]
+        picks = managers_picks[user_i]
+        total_pts = picks['entry_history']['total_points']
+        gameweek_pts = picks['entry_history']['points']
+        bench_pts = picks['entry_history']['points_on_bench']
+        transfers_cost = picks['entry_history']['event_transfers_cost']
+        active_chip = chips[picks['active_chip']]
 
-        squad_ids = [pick['element'] for pick in managers_picks[user_i]['picks']]
+        squad_ids = [pick['element'] for pick in picks['picks']]
         squad_names = [_.find(boot['elements'], {'id': i})['web_name'] for i in squad_ids]
-        squad_gw_data = [_.find(gw_data, {'element': i}) for i in squad_ids]
+        squad_gw = [_.find(gw_data, {'element': i}) for i in squad_ids]
 
+        managers_squads[gameweek][manager_name]['ids'] = squad_ids
         managers_squads[gameweek][manager_name]['names'] = squad_names
 
         squad_df = pd.DataFrame(columns=['name', 'pts'], index=range(15))
@@ -147,51 +150,71 @@ for gameweek in gameweeks:
             except KeyError:
                 squad_df.loc[i, 'name'] = squad_names[i]
 
-            if managers_picks[user_i]['picks'][i]['is_captain']:
+            if picks['picks'][i]['is_captain']:
                 squad_df.loc[i, 'name'] = squad_df.loc[i, 'name'] + ' (C)'
-            elif managers_picks[user_i]['picks'][i]['is_vice_captain']:
+            elif picks['picks'][i]['is_vice_captain']:
                 squad_df.loc[i, 'name'] = squad_df.loc[i, 'name'] + ' (V)'
-            if squad_gw_data[i] is not None:
-                if managers_picks[user_i]['picks'][i]['is_captain']:
-                    squad_df.loc[i, 'pts'] = squad_gw_data[i]['total_points'] * managers_picks[user_i]['picks'][i]['multiplier']
-                elif managers_picks[user_i]['picks'][i]['is_vice_captain']:
-                    squad_df.loc[i, 'pts'] = squad_gw_data[i]['total_points'] * managers_picks[user_i]['picks'][i]['multiplier']
+            if squad_gw[i] is not None:
+                if picks['picks'][i]['is_captain']:
+                    squad_df.loc[i, 'pts'] = squad_gw[i]['total_points'] * picks['picks'][i]['multiplier']
+                elif picks['picks'][i]['is_vice_captain']:
+                    squad_df.loc[i, 'pts'] = squad_gw[i]['total_points'] * picks['picks'][i]['multiplier']
                 else:
-                    squad_df.loc[i, 'pts'] = squad_gw_data[i]['total_points']
+                    squad_df.loc[i, 'pts'] = squad_gw[i]['total_points']
 
-                if squad_gw_data[i]['minutes'] == 0 and _.find(fixtures, {'id': squad_gw_data[i]['fixture']})['finished']:
+                if squad_gw[i]['minutes'] == 0 and _.find(fixtures, {'id': squad_gw[i]['fixture']})['finished']:
                     squad_df.loc[i, 'name'] = squad_df.loc[i, 'name'] + ' **'
             else:
                 squad_df.loc[i, 'pts'] = '-'
 
-        # add data to Google sheet (first run should ask for permission and .pickle file will be created)
-        manager_col1 = pd.DataFrame([manager_rank] +
-                                    [manager_name] +
-                                    [f"{manager['player_first_name']} {manager['player_last_name']}"] +
-                                    ['Starters:'] +
-                                    squad_df.loc[:10, 'name'].tolist() +
-                                    ['Subs:'] +
-                                    squad_df.loc[11:, 'name'].tolist() +
-                                    [manager_active_chip])
-        manager_col2 = pd.DataFrame([''] +
-                                    [manager_total_pts] +
-                                    [''] +
-                                    [manager_gameweek_pts] +
-                                    squad_df.loc[:10, 'pts'].tolist() +
-                                    [manager_bench_pts] +
-                                    squad_df.loc[11:, 'pts'].tolist() +
-                                    [''])
-        squads.loc[:, user_i*2] = manager_col1
-        squads.loc[:, user_i*2 + 1] = manager_col2
+        # transfers analysis
+        in_points = 0
+        out_points = 0
+        if gameweek != 1:
+            if manager_name in managers_squads[gameweek - 1].keys():
+                in_players = list(set(squad_ids) - set(managers_squads[gameweek - 1][manager_name]['ids']))
+                out_players = list(set(managers_squads[gameweek - 1][manager_name]['ids']) - set(squad_ids))
+                for in_id in in_players:
+                    in_points += _.find(gw_data, {'element': in_id})['total_points']
+                for out_id in out_players:
+                    if _.find(gw_data, {'element': out_id}) is not None:
+                        out_points += _.find(gw_data, {'element': out_id})['total_points']
+                    else:
+                        element_summary = requests.get(f"{base}/element-summary/{out_id}/").json()['history']
+                        if _.find(element_summary, {'round': gameweek}) is not None:
+                            out_points += _.find(element_summary, {'round': gameweek})['total_points']
+
+        squads.loc[:, user_i * 2] = [manager_rank,
+                                     manager_name,
+                                     f"{manager['player_first_name']} {manager['player_last_name']}",
+                                     'GW Total',
+                                     *squad_df.loc[:10, 'name'].tolist(),
+                                     'Bench Points',
+                                     *squad_df.loc[11:, 'name'].tolist(),
+                                     'Transferred in points',
+                                     'Transferred out points',
+                                     'in - out - cost =',
+                                     active_chip]
+        squads.loc[:, user_i * 2 + 1] = ['',
+                                         total_pts,
+                                         '',
+                                         gameweek_pts,
+                                         *squad_df.loc[:10, 'pts'].tolist(),
+                                         bench_pts,
+                                         *squad_df.loc[11:, 'pts'].tolist(),
+                                         in_points,
+                                         out_points,
+                                         in_points - out_points - transfers_cost,
+                                         '']
     if gameweek != current_gameweek:
-        squads_sorted = pd.DataFrame(index=range(21), columns=range(int(len(squads.columns)/2)))
+        squads_sorted = pd.DataFrame(index=range(len(squads.index)), columns=range(int(len(squads.columns) / 2)))
         for i, ind in enumerate(range(1, len(squads.columns), 2)):
             argsort = list(np.argsort(squads.iloc[1, range(1, len(squads.columns), 2)])[::-1])[i]
             squads_sorted.loc[:, ind - 1] = squads.loc[:, argsort * 2]
             squads_sorted.loc[:, ind] = squads.loc[:, argsort * 2 + 1]
         squads = squads_sorted
 
-        ranks = list(range(1, int(len(squads.columns)/2) + 1))
+        ranks = list(range(1, int(len(squads.columns) / 2) + 1))
         range_previous = list(range(-2, len(squads.columns) - 2, 2))
         range_current = list(range(0, len(squads.columns), 2))
         for i in range(len(ranks)):
@@ -203,6 +226,7 @@ for gameweek in gameweeks:
                 squads.loc[0, range_current[i]] = ranks[i]
 
     managers_squads[gameweek]['squads'] = squads
+    squads.insert(0, 'header', header)
     last_col_index = len(squads.columns) + 1
 
     utils.df_to_spreadsheet(squads, f'GW{str(gameweek)}', last_col_index)
