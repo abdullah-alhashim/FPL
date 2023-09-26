@@ -64,7 +64,7 @@ for i in range(len(boot['events'])):
         break
 assert current_gameweek is not None
 # exclude gameweeks that already exist
-# gameweeks = list(set(gameweeks) - set([int(name[2:]) for name in sheets_names if name != 'base']))
+gameweeks = list(set(gameweeks) - set([int(name[2:]) for name in sheets_names if name != 'base']))
 
 # always include current gameweek
 gameweeks += [current_gameweek]
@@ -175,7 +175,8 @@ for gameweek in gameweeks:
                 in_players = list(set(squad_ids) - set(managers_squads[gameweek - 1][manager_name]['ids']))
                 out_players = list(set(managers_squads[gameweek - 1][manager_name]['ids']) - set(squad_ids))
                 for in_id in in_players:
-                    in_points += _.find(gw_data, {'element': in_id})['total_points']
+                    if in_id in squad_ids[:11]:  # in player must be in starting 11
+                        in_points += _.find(gw_data, {'element': in_id})['total_points']
                 for out_id in out_players:
                     if _.find(gw_data, {'element': out_id}) is not None:
                         out_points += _.find(gw_data, {'element': out_id})['total_points']
