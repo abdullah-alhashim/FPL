@@ -168,22 +168,25 @@ for gameweek in gameweeks:
                 squad_df.loc[i, 'pts'] = '-'
 
         # transfers analysis
-        in_points = 0
-        out_points = 0
+        in_points, out_points = 'NA', 'NA'
         if gameweek != 1:
-            if manager_name in managers_squads[gameweek - 1].keys():
-                in_players = list(set(squad_ids) - set(managers_squads[gameweek - 1][manager_name]['ids']))
-                out_players = list(set(managers_squads[gameweek - 1][manager_name]['ids']) - set(squad_ids))
-                for in_id in in_players:
-                    if in_id in squad_ids[:11]:  # in player must be in starting 11
-                        in_points += _.find(gw_data, {'element': in_id})['total_points']
-                for out_id in out_players:
-                    if _.find(gw_data, {'element': out_id}) is not None:
-                        out_points += _.find(gw_data, {'element': out_id})['total_points']
-                    else:
-                        element_summary = requests.get(f"{base}/element-summary/{out_id}/").json()['history']
-                        if _.find(element_summary, {'round': gameweek}) is not None:
-                            out_points += _.find(element_summary, {'round': gameweek})['total_points']
+            try:
+                if manager_name in managers_squads[gameweek - 1].keys():
+                    in_points, out_points = 0, 0
+                    in_players = list(set(squad_ids) - set(managers_squads[gameweek - 1][manager_name]['ids']))
+                    out_players = list(set(managers_squads[gameweek - 1][manager_name]['ids']) - set(squad_ids))
+                    for in_id in in_players:
+                        if in_id in squad_ids[:11]:  # in player must be in starting 11
+                            in_points += _.find(gw_data, {'element': in_id})['total_points']
+                    for out_id in out_players:
+                        if _.find(gw_data, {'element': out_id}) is not None:
+                            out_points += _.find(gw_data, {'element': out_id})['total_points']
+                        else:
+                            element_summary = requests.get(f"{base}/element-summary/{out_id}/").json()['history']
+                            if _.find(element_summary, {'round': gameweek}) is not None:
+                                out_points += _.find(element_summary, {'round': gameweek})['total_points']
+            except KeyError:
+                in_points, out_points = 'NA', 'NA'
 
         squads.loc[:, user_i * 2] = [manager_rank,
                                      manager_name,
@@ -194,7 +197,7 @@ for gameweek in gameweeks:
                                      *squad_df.loc[11:, 'name'].tolist(),
                                      'Transferred in points',
                                      'Transferred out points',
-                                     'in - out - cost =',
+                                     f'in - out - cost ({transfers_cost}) =',
                                      active_chip]
         squads.loc[:, user_i * 2 + 1] = ['',
                                          total_pts,
